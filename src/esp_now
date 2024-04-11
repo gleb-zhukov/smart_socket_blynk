@@ -1,0 +1,323 @@
+void send_packet(uint8_t *func_mac_addr, uint8_t *func_device_mac_addr, uint8_t func_command) { //выключателю
+  struct {
+    uint8_t ID; //ID устройства (розетка, выключатель, датчик и т.д.)
+    uint8_t command; //команда устройству
+    char router_ssid[35];
+    char router_pass[65];
+    uint8_t mac_address[6]; //для выключателя (чтобы знал каким устройством управлять)
+  } to_device;
+
+  to_device.ID = 0;
+  to_device.command = func_command;
+  for (int i = 0; i < 6; i++) {
+    to_device.mac_address[i] = func_device_mac_addr[i];
+  }
+
+  EEPROM.get(3430, to_device.router_ssid);
+  EEPROM.get(3467, to_device.router_pass);
+
+  esp_now_send(func_mac_addr, (uint8_t *) &to_device, sizeof(to_device));
+
+}
+
+void send_packet(uint8_t *func_mac_addr, uint8_t func_command) { //реле или розетке
+  struct {
+    uint8_t ID; //ID устройства (розетка, выключатель, датчик и т.д.)
+    uint8_t command; //команда устройству
+    char router_ssid[35];
+    char router_pass[65];
+  } to_device;
+  to_device.ID = 0;
+  to_device.command = func_command;
+  EEPROM.get(3430, to_device.router_ssid);
+  EEPROM.get(3467, to_device.router_pass);
+  esp_now_send(func_mac_addr, (uint8_t *) &to_device, sizeof(to_device)); //отправляем команду нужному реле/розетке
+
+}
+
+void send_packet(uint8_t *func_mac_addr, uint8_t func_command, uint8_t func_r, uint8_t func_g, uint8_t func_b) { //rgb контроллеру
+  struct {
+    uint8_t ID; //ID устройства (розетка, выключатель, датчик и т.д.)
+    uint8_t command; //команда устройству
+    char router_ssid[35];
+    char router_pass[65];
+    uint8_t bright; //яркость (для диммера и rgb-контроллера)
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+  } to_device;
+
+  to_device.ID = 0;
+  to_device.command = func_command;
+  to_device.r = func_r;
+  to_device.g = func_g;
+  to_device.b = func_b;
+  EEPROM.get(3430, to_device.router_ssid);
+  EEPROM.get(3467, to_device.router_pass);
+  esp_now_send(func_mac_addr, (uint8_t *) &to_device, sizeof(to_device)); //отправляем команду нужному реле/розетке
+
+}
+
+
+void send_packet(uint8_t *func_mac_addr, uint8_t func_command, uint8_t func_bright) { //диммеру и rgb подсветке
+  struct {
+    uint8_t ID; //ID устройства (розетка, выключатель, датчик и т.д.)
+    uint8_t command; //команда устройству
+    char router_ssid[35];
+    char router_pass[65];
+    uint8_t bright; //яркость (для диммера и rgb-контроллера)
+  } to_device;
+
+  to_device.ID = 0;
+  to_device.command = func_command;
+  to_device.bright = func_bright;
+  EEPROM.get(3430, to_device.router_ssid);
+  EEPROM.get(3467, to_device.router_pass);
+  esp_now_send(func_mac_addr, (uint8_t *) &to_device, sizeof(to_device)); //отправляем команду нужному реле/розетке
+
+}
+
+void send_answer(byte answer) {
+  switch (answer) {
+    case 0:
+      bot.sendMessage("Выключено! \xF0\x9F\x8C\x91", answer_ID);
+      break;
+    case 1:
+      bot.sendMessage("Включено! \xE2\x9A\xA1", answer_ID);
+      break;
+    case 2:
+      bot.closeMenuText("Обнаружено новое реле/розетка. Придумайте название: ", answer_ID);
+      break;
+    case 3:
+      bot.showMenuText("Настройка выполнена успешно!",
+                       "Освещение \xF0\x9F\x92\xA1 \n"
+                       "Розетки \xF0\x9F\x94\x8C \n"
+                       "Настройки \xE2\x9A\x99 \n"
+                       "У меня проблема \xF0\x9F\x91\x80", answer_ID);
+      break;
+    case 4:
+      bot.sendMessage("Ошибка. Попробуйте ещё раз.", answer_ID);
+      break;
+    case 5:
+      {
+        uint32_t userid[10]; //создаем массив с ID пользователей
+        EEPROM.put(3580, userid); //записываем ID из EEPROM
+        for (int i = 0; i < 10; i++) { //чтобы отправить сообщение каждому добавленному пользователю
+          if (userid[i] != 0) {
+            String answer_ID = "";
+            answer_ID += userid [i];
+            bot.sendMessage("ВНИМАНИЕ! ДВЕРЬ ОТКРЫТА \xE2\x9A\xA0", answer_ID);
+
+          }
+        }
+      }
+      break;
+    case 6:
+      bot.sendMessage("Яркость настроена \xF0\x9F\x8C\x97", answer_ID);
+      break;
+    case 7:
+      bot.sendMessage("Отличный цвет \xF0\x9F\x8E\xA8", answer_ID);
+      break;
+    case 8:
+      bot.closeMenuText("Обнаружен новый RGB-контроллер. Придумайте название: ", answer_ID);
+      break;
+    default:
+      break;
+  }
+}
+
+
+void data_recv(uint8_t * mac_addr, uint8_t *incomingData, uint8_t len) {
+
+  struct {
+    uint8_t ID; //ID устройства (розетка, выключатель или сигнализация)
+    uint8_t command; //команда устройства
+    uint8_t bright; //яркость (для диммера и rgb-контроллера)
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+    float humidity;
+    float temperature;
+    uint16_t ppm; //(co2)
+    uint16_t pressure;
+  } from_device;
+
+
+  memcpy(&from_device, incomingData, sizeof(from_device));
+
+  
+  Serial.print("id: ");
+  Serial.println(from_device.ID);
+  Serial.print("command: ");
+  Serial.println(from_device.command);
+  
+  if (from_device.ID == 1) { //если сообщение от slave
+
+    if ((from_device.command == 0) && answer_flag) { //если выключено
+      answer_command = 0;
+      esp_now_flag = true;
+      answer_flag = false;
+    }
+    else if ((from_device.command == 1) && answer_flag) { //если включено
+      answer_command = 1;
+      esp_now_flag = true;
+      answer_flag = false;
+    }
+    else if ((from_device.command == 2) && (tg_mode == 5)) { //если запрос на сопряжение и включен режим настройки устройства
+
+      answer_command = 2;
+      esp_now_flag = true;
+
+      //получаем в массив broadcast_address mac отправителя
+      for (int i = 0; i < 6; i++) {
+        broadcast_address[i] = mac_addr[i];
+      }
+      device_type_global = 1;
+      tg_mode = 10; //режим настройки устройства в обработчике сообщений tg
+    }
+  }
+
+  else if (from_device.ID == 2) { //если сообщение от выключателя
+    if (from_device.command == 0) { //если команда на вкл/выкл
+      set_relay();
+    }
+    else if ((from_device.command == 1) && (tg_mode == 9)) { //если запрос на сопряжение и включен режим настройки выключателя
+      send_packet(mac_addr, broadcast_address, 2);
+      tg_mode = 0;
+    }
+    else if (from_device.command == 2) { //если отчет об успешной настройке
+      answer_command = 3;
+      esp_now_flag = true;
+    }
+  }
+
+  else if (from_device.ID == 5) { //если сообщение от rgb-контроллера
+
+    if ((from_device.command == 0) && answer_flag) { //если выключено
+      answer_command = 0;
+      esp_now_flag = true;
+      answer_flag = false;
+    }
+    else if ((from_device.command == 1) && answer_flag) { //если включено
+      answer_command = 1;
+      esp_now_flag = true;
+      answer_flag = false;
+    }
+    else if ((from_device.command == 2) && (tg_mode == 5)) { //если запрос на сопряжение и включен режим настройки устройства
+
+      answer_command = 8;
+      esp_now_flag = true;
+
+      device_type_global = 2;
+
+      //получаем в массив broadcast_address mac отправителя
+      for (int i = 0; i < 6; i++) {
+        broadcast_address[i] = mac_addr[i];
+
+      }
+
+      tg_mode = 10;
+    }
+    else if ((from_device.command == 3) && answer_flag) { //если ответ об успешной настройке яркости
+      answer_command = 6;
+      esp_now_flag = true;
+      answer_flag = false;
+    }
+    else if ((from_device.command == 4) && answer_flag) { //если ответ об успешной настройке цвета
+      answer_command = 7;
+      esp_now_flag = true;
+      answer_flag = false;
+    }
+  }
+  /*
+    else if (from_device.ID == 3) { //если сообщение от датчика открытия двери
+    if (from_device.command == 0) { //если сигнал тревоги
+      answer_command = 5;
+      esp_now_flag = true;
+    }
+    else if ((from_device.command == 1) && reed_flag) { //если запрос о настройке
+
+      to_device.ID = 0; //сообщение от master
+      to_device.command = 2; //отчет об успешной настройке
+
+      esp_now_send(mac_addr, (uint8_t *) &to_device, sizeof(to_device));
+
+      answer_command = 5;
+      esp_now_flag = true;
+    }
+    }
+  */
+}
+
+void data_recv_sock(uint8_t * mac_addr, uint8_t *incomingData, uint8_t len) {
+
+  struct {
+    uint8_t ID; //ID устройства (розетка, выключатель или сигнализация)
+    uint8_t command; //команда устройства
+    char router_ssid[35];
+    char router_pass[65];
+  } from_device;
+
+
+  memcpy(&from_device, incomingData, sizeof(from_device));
+
+  if (from_device.ID == 0) { //сообщение от master
+    if (from_device.command == 0) {//запрос на включение/выключение
+      set_relay();
+
+      struct {
+        uint8_t ID; //ID устройства (розетка, выключатель или сигнализация)
+        uint8_t command; //команда устройства
+      } to_device;
+
+      to_device.ID = 1; //сообщение от slave
+      to_device.command = digitalRead(12); //отчет включено или выключено
+
+      esp_now_send(mac_addr, (uint8_t *) &to_device, sizeof(to_device));
+
+      //записываем в EEPROM ssid и пароль wifi с выходом в интернет
+      //put сравнивает записанные данные с новыми, и если они не отличаются, перезапись не выполняется
+      EEPROM.put(150, mac_addr); //mac адрес master устройства
+      EEPROM.put(3467, from_device.router_pass);
+      EEPROM.put(3430, from_device.router_ssid);
+      EEPROM.commit();
+
+    }
+
+    if (from_device.command == 4) {//запрос на включение
+      digitalWrite(12, HIGH);
+      EEPROM.put(3570, 1); //pin_state
+      EEPROM.commit();
+    }
+
+    if (from_device.command == 5) {//запрос на выключение
+      digitalWrite(12, LOW);
+      EEPROM.put(3570, 0); //pin_state
+      EEPROM.commit();
+    }
+  }
+
+  else if (from_device.ID == 2) { //сообщение от выключателя
+    if (from_device.command == 0) //запрос на включение/выключение
+    {
+      set_relay();
+    }
+  }
+}
+
+//функция при отправке данных
+void data_sent(uint8_t *mac_addr, uint8_t send_status) {
+  if (send_status != 0) {
+    answer_command = 4;
+    esp_now_flag = true;
+  }
+}
+
+void data_sent_sock(uint8_t *mac_addr, uint8_t send_status) {
+  if (send_status != 0) {
+
+    //Serial.println("Пакет не отправлен, настраиваем канал");
+    set_channel_flag = true;
+
+  }
+}
